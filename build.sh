@@ -2,11 +2,16 @@
 
 if [ "$1" = "install" ]
 then
-	sudo apt-get -y update
-	sudo apt-get -y upgrade
-	sudo apt-get -y install libopencv-dev
+	sudo apt update
+	sudo apt install -y build-essential pkg-config libopencv-dev
 fi
 
 flags="-O3 -std=c++17"
 
-g++ VisualStudio/LaneKeeping/*.cpp -o app $flags `pkg-config --cflags --libs opencv`
+if [ "$1" = "camera-test" ]
+then
+	g++ camera_open_test.cpp -o camera_open_test $flags `pkg-config --cflags --libs opencv4`
+	exit $?
+fi
+
+g++ VisualStudio/LaneKeeping/*.cpp -o app $flags `pkg-config --cflags --libs opencv4`

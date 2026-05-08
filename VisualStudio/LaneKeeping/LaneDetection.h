@@ -22,6 +22,7 @@ class LaneDetection {
 	static std::vector<cv::Point> s_rightLinePoints;
 	static std::vector<cv::Point> s_leftLinePoints;
 	static std::array<cv::Point, 4> s_boundaries;
+	static bool s_previewEnabled;
 
 	static void createMask(const cv::Size& frameSize, double frameFormat);
 	static inline void applyMask();
@@ -34,6 +35,7 @@ class LaneDetection {
 	static inline void hystheresis(std::array<float, 4> xPositions);
 
 	static void errorHanlder();
+	static bool hasDisplayServer();
 
 public:
 	static void prepare(const cv::Size& frameSize, double frameFormat);

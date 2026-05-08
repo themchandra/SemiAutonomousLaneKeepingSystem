@@ -9,6 +9,9 @@ Project for my engineering thesis at AGH University of Science and Technology [W
 Linux:   `./build.sh`\
 Windows: Using Visual Studio 2019
 
+Camera probe: `./build.sh camera-test`\
+Run it with `./camera_open_test` to verify the camera opens in OpenCV.
+
 
 ## Depencencies
 Linux: `./build.sh install`\

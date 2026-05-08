@@ -1,5 +1,7 @@
 #include "LaneDetection.h"
 
+#include <cstdlib>
+
 cv::Mat LaneDetection::s_frame;
 int LaneDetection::s_frameCenter;
 int LaneDetection::s_maxLineHeight;
@@ -11,9 +13,19 @@ std::vector<cv::Vec4i> LaneDetection::s_lines;
 std::vector<cv::Point> LaneDetection::s_rightLinePoints;
 std::vector<cv::Point> LaneDetection::s_leftLinePoints;
 std::array<cv::Point, 4> LaneDetection::s_boundaries = {};
+bool LaneDetection::s_previewEnabled = true;
+
+bool LaneDetection::hasDisplayServer() {
+    const char* display = std::getenv("DISPLAY");
+    const char* waylandDisplay = std::getenv("WAYLAND_DISPLAY");
+
+    return (display != nullptr && display[0] != '\0')
+        || (waylandDisplay != nullptr && waylandDisplay[0] != '\0');
+}
 
 void LaneDetection::createMask(const cv::Size& frameSize, double frameFormat) {
-    s_mask = cv::Mat::zeros(frameSize, frameFormat);
+    (void)frameFormat;
+    s_mask = cv::Mat::zeros(frameSize, CV_8UC1);
 
     const float hScale = 0.625;
 
@@ -229,6 +241,11 @@ void LaneDetection::prepare(const cv::Size& frameSize, double frameFormat) {
     createMask(frameSize, frameFormat);
     s_frameCenter = frameSize.width / 2;
     s_maxLineHeight = static_cast<int>(0.66f * frameSize.height);
+    s_previewEnabled = hasDisplayServer();
+
+    if (!s_previewEnabled) {
+        std::cerr << "No display server detected, disabling preview window.\n";
+    }
 }
 
 void LaneDetection::setFrame(const cv::Mat& frame) {
@@ -272,8 +289,17 @@ void LaneDetection::display(cv::Mat& frame) {
     cv::line(frame, s_boundaries[0], s_boundaries[1], cv::Scalar(255, 255, 255), 7, cv::LINE_AA);
     cv::line(frame, s_boundaries[2], s_boundaries[3], cv::Scalar(255, 255, 255), 7, cv::LINE_AA);
     
-    //display processed frame
-    cv::imshow("Lane detection", frame);
-    cv::waitKey(1);
+    if (!s_previewEnabled) {
+        return;
+    }
+
+    try {
+        // Display processed frame when GUI backend is available.
+        cv::imshow("Lane detection", frame);
+        cv::waitKey(1);
+    } catch (const cv::Exception& e) {
+        std::cerr << "Preview disabled: " << e.what() << "\n";
+        s_previewEnabled = false;
+    }
 }
 
