@@ -5,10 +5,12 @@
 #include <iostream>
 #include <iomanip>
 #include <sstream>
+#include <filesystem>
 
 cv::Mat LaneDetection::s_frame;
 int LaneDetection::s_frameCenter;
 int LaneDetection::s_maxLineHeight;
+int LaneDetection::s_laneCenter = 0;
 std::array<std::array<cv::Point, 4>, LaneDetection::s_hystheresisCount> LaneDetection::s_hystheresisArray = {{}};
 unsigned short LaneDetection::s_hystheresisArrayCounter = 0;
 bool LaneDetection::s_hystheresisArrayFilled = false;
@@ -18,6 +20,41 @@ std::vector<cv::Point> LaneDetection::s_rightLinePoints;
 std::vector<cv::Point> LaneDetection::s_leftLinePoints;
 std::array<cv::Point, 4> LaneDetection::s_boundaries = {};
 bool LaneDetection::s_previewEnabled = true;
+
+int LaneDetection::s_steeringError = 0;
+
+void LaneDetection::computeLaneCenter()
+{
+    s_laneCenter = (s_boundaries[0].x + s_boundaries[3].x) / 2;
+}
+
+void LaneDetection::computeSteeringError()
+{
+    s_steeringError = s_laneCenter - s_frameCenter;
+}
+
+int LaneDetection::getSteeringError()
+{
+    return s_steeringError;
+}
+
+static void ensureDebugDirectories()
+{
+    namespace fs = std::filesystem;
+    try
+    {
+        fs::create_directories("debug/input");
+        fs::create_directories("debug/roi");
+        fs::create_directories("debug/mask");
+        fs::create_directories("debug/morphology");
+        fs::create_directories("debug/hough");
+        fs::create_directories("debug/final");
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << "Failed to create debug directories: " << e.what() << "\n";
+    }
+}
 
 bool LaneDetection::hasDisplayServer()
 {
@@ -42,7 +79,13 @@ void LaneDetection::createMask(const cv::Size &frameSize, double frameFormat)
 
 inline void LaneDetection::applyMask()
 {
-    // Convert single-channel mask to match frame's number of channels
+
+    if (s_frame.channels() == 1)
+    {
+        cv::bitwise_and(s_frame, s_mask, s_frame);
+        return;
+    }
+
     std::vector<cv::Mat> channels;
     cv::split(s_frame, channels);
 
@@ -73,28 +116,28 @@ inline void LaneDetection::edgeDetection()
 
     cv::Mat hsv;
     cv::cvtColor(s_frame, hsv, cv::COLOR_BGR2HSV);
-    cv::imwrite("images/01_hsv.png", hsv);
+    cv::imwrite("debug/input/01_hsv.png", hsv);
 
     cv::Mat whiteHSV;
     // broaden saturation and value ranges to be more robust to lighting
     cv::inRange(hsv, cv::Scalar(0, 0, 110), cv::Scalar(180, 140, 255), whiteHSV);
-    cv::imwrite("images/02_whiteHSV.png", whiteHSV);
+    cv::imwrite("debug/mask/02_whiteHSV.png", whiteHSV);
     std::cout << "    whiteHSV non-zero pixels: " << cv::countNonZero(whiteHSV) << "\n";
 
     cv::Mat gray;
     cv::cvtColor(s_frame, gray, cv::COLOR_BGR2GRAY);
-    cv::imwrite("images/03_gray.png", gray);
+    cv::imwrite("debug/input/03_gray.png", gray);
 
     cv::Mat bright;
     // simple global threshold; may be adjusted (try 180-220)
     cv::threshold(gray, bright, 130, 255, cv::THRESH_BINARY);
-    cv::imwrite("images/04_bright.png", bright);
+    cv::imwrite("debug/mask/04_bright.png", bright);
     std::cout << "    bright non-zero pixels: " << cv::countNonZero(bright) << "\n";
 
     // Combine both masks
     cv::Mat combined;
     cv::bitwise_or(whiteHSV, bright, combined);
-    cv::imwrite("images/05_combined.png", combined);
+    cv::imwrite("debug/mask/05_combined.png", combined);
     std::cout << "    combined non-zero pixels: " << cv::countNonZero(combined) << "\n";
 
     // Clean mask: open then close to remove small noise and bridge gaps
@@ -102,13 +145,13 @@ inline void LaneDetection::edgeDetection()
     cv::Mat cleaned;
     cv::morphologyEx(combined, cleaned, cv::MORPH_OPEN, kernel);
     cv::morphologyEx(cleaned, cleaned, cv::MORPH_CLOSE, kernel);
-    cv::imwrite("images/06_cleaned.png", cleaned);
+    cv::imwrite("debug/morphology/06_cleaned.png", cleaned);
     std::cout << "    cleaned non-zero pixels: " << cv::countNonZero(cleaned) << "\n";
 
     // Optional: use Canny edges to give cleaner inputs to HoughLinesP
     cv::Mat edges;
     cv::Canny(cleaned, edges, 50, 150);
-    cv::imwrite("images/07_edges.png", edges);
+    cv::imwrite("debug/hough/07_edges.png", edges);
     std::cout << "    edges non-zero pixels: " << cv::countNonZero(edges) << "\n";
 
     // Keep the final output in s_frame only after every intermediate stage is saved.
@@ -128,7 +171,7 @@ inline void LaneDetection::houghLines()
 
     // Tune parameters: increase minLineLength and reduce maxLineGap
     // for longer continuous markings on tracks.
-    HoughLinesP(s_frame, s_lines, 1, CV_PI / 180, 18, 40, 20);
+    cv::HoughLinesP(s_frame, s_lines, 1, CV_PI / 180, 18, 40, 20);
 }
 
 void LaneDetection::classifyLines()
@@ -275,7 +318,7 @@ inline void LaneDetection::hystheresis(std::array<float, 4> xPositions, int lowe
             avgXPositions[i] = avg;
             if (s_hystheresisCount == skipped)
             {
-                errorHanlder();
+                errorHandler();
                 return;
             }
             avgXPositions[i] /= (s_hystheresisCount - skipped);
@@ -330,7 +373,7 @@ inline void LaneDetection::hystheresis(std::array<float, 4> xPositions, int lowe
     }
 }
 
-void LaneDetection::errorHanlder()
+void LaneDetection::errorHandler()
 {
     std::cerr << "An error has occured!\n";
 
@@ -359,13 +402,13 @@ void LaneDetection::errorHanlder()
         {
             if (!s_frame.empty())
             {
-                cv::imwrite("debug_frame_" + ts + ".png", s_frame);
-                std::cerr << "Wrote debug_frame_" << ts << ".png\n";
+                cv::imwrite(std::string("debug/input/debug_frame_") + ts + ".png", s_frame);
+                std::cerr << "Wrote debug/input/debug_frame_" << ts << ".png\n";
             }
             if (!s_mask.empty())
             {
-                cv::imwrite("debug_mask_" + ts + ".png", s_mask);
-                std::cerr << "Wrote debug_mask_" << ts << ".png\n";
+                cv::imwrite(std::string("debug/mask/debug_mask_") + ts + ".png", s_mask);
+                std::cerr << "Wrote debug/mask/debug_mask_" << ts << ".png\n";
             }
         }
         catch (const cv::Exception &e)
@@ -385,6 +428,9 @@ void LaneDetection::prepare(const cv::Size &frameSize, double frameFormat)
     s_frameCenter = frameSize.width / 2;
     s_maxLineHeight = static_cast<int>(0.66f * frameSize.height);
     s_previewEnabled = hasDisplayServer();
+
+    // Ensure debug folders exist
+    ensureDebugDirectories();
 
     if (!s_previewEnabled)
     {
@@ -411,12 +457,12 @@ void LaneDetection::process(cv::Mat &frame)
     setFrame(frame);
     std::cout << "[1] Original image loaded\n";
 
-    applyMask(); // crop/ROI
-    std::cout << "[2] ROI mask applied - saving to images/01_roi_" << ts << ".png\n";
-    cv::imwrite("images/01_roi_" + ts + ".png", s_frame);
-
     edgeDetection(); // detect bright white pixels + clean mask
-    std::cout << "[3] Edge detection stages saved to images/01_hsv.png through images/07_edges.png\n";
+    std::cout << "[2] Edge detection stages saved to debug/... subfolders\n";
+
+    applyMask(); // crop/ROI
+    std::cout << "[3] ROI mask applied - saving to debug/roi/01_roi_" << ts << ".png\n";
+    cv::imwrite(std::string("debug/roi/01_roi_") + ts + ".png", s_frame);
 
     houghLines(); // detect line segments
     std::cout << "[4] Line segments detected: " << s_lines.size() << " lines\n";
@@ -430,8 +476,8 @@ void LaneDetection::process(cv::Mat &frame)
             cv::line(houghVis, cv::Point(line[0], line[1]), cv::Point(line[2], line[3]),
                      cv::Scalar(0, 255, 0), 2, cv::LINE_AA);
         }
-        std::cout << "    Saving line segments visualization to images/03_line_segments_" << ts << ".png\n";
-        cv::imwrite("images/03_line_segments_" + ts + ".png", houghVis);
+        std::cout << "    Saving line segments visualization to debug/hough/03_line_segments_" << ts << ".png\n";
+        cv::imwrite(std::string("debug/hough/03_line_segments_") + ts + ".png", houghVis);
     }
 
     if (!s_lines.empty())
@@ -439,6 +485,13 @@ void LaneDetection::process(cv::Mat &frame)
         classifyLines(); // filter lane lines (left/right classification)
         std::cout << "[5] Lane lines filtered - Left points: " << s_leftLinePoints.size()
                   << ", Right points: " << s_rightLinePoints.size() << "\n";
+
+        if (s_leftLinePoints.empty() || s_rightLinePoints.empty())
+        {
+            std::cout << "[X] ERROR: Not enough classified lane points!\n";
+            errorHandler();
+            return;
+        }
 
         leastSquaresRegression(); // calculate lane regression
         std::cout << "[6] Least squares regression complete\n";
@@ -448,15 +501,20 @@ void LaneDetection::process(cv::Mat &frame)
         std::cout << "      Right lower: (" << s_boundaries[3].x << ", " << s_boundaries[3].y << ")\n";
         std::cout << "      Right upper: (" << s_boundaries[2].x << ", " << s_boundaries[2].y << ")\n";
 
+        computeLaneCenter();
+        computeSteeringError();
+        std::cout << "Lane center: " << s_laneCenter << "\n";
+        std::cout << "Steering error: " << s_steeringError << "\n";
+
         display(frame);
         std::cout << "[7] Display overlay applied\n";
-        std::cout << "    Saving final output to images/04_output_" << ts << ".png\n";
-        cv::imwrite("images/04_output_" + ts + ".png", frame);
+        std::cout << "    Saving final output to debug/final/04_output_" << ts << ".png\n";
+        cv::imwrite(std::string("debug/final/04_output_") + ts + ".png", frame);
     }
     else
     {
         std::cout << "[X] ERROR: No lines detected!\n";
-        errorHanlder();
+        errorHandler();
     }
 
     std::cout << "=== Pipeline Complete ===\n";
