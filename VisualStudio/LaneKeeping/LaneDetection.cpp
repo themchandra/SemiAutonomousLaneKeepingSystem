@@ -7,6 +7,33 @@
 #include <sstream>
 #include <filesystem>
 
+namespace
+{
+    // Region-of-interest geometry (fractions of frame height)
+    constexpr float kRoiTopRatio = 0.45f;
+    constexpr float kLowerLaneSampleRatio = 0.57f;
+    constexpr float kUpperLaneSampleRatio = 0.47f;
+
+    // Color / intensity thresholds for white lane detection
+    constexpr int kWhiteMinValue = 110;       // minimum V (value) for white in HSV
+    constexpr int kWhiteMaxSaturation = 140;  // maximum S (saturation) for white in HSV
+    constexpr int kBrightnessThreshold = 130; // grayscale brightness threshold
+
+    // Canny edge detector thresholds
+    constexpr int kMinEdgePixelsForCanny = 50;
+    constexpr int kCannyLowThreshold = 50;
+    constexpr int kCannyHighThreshold = 150;
+
+    // HoughLinesP parameters
+    constexpr int kHoughThreshold = 18;
+    constexpr int kHoughMinLineLength = 40;
+    constexpr int kHoughMaxLineGap = 20;
+
+    // Lane slope filtering bounds
+    constexpr float kMinLaneSlope = 0.3f;
+    constexpr float kMaxLaneSlope = 1.5f;
+}
+
 cv::Mat LaneDetection::s_frame;
 int LaneDetection::s_frameCenter;
 int LaneDetection::s_maxLineHeight;
@@ -22,6 +49,7 @@ std::array<cv::Point, 4> LaneDetection::s_boundaries = {};
 bool LaneDetection::s_previewEnabled = true;
 
 int LaneDetection::s_steeringError = 0;
+float LaneDetection::s_normalizedSteeringError = 0.0f;
 
 void LaneDetection::computeLaneCenter()
 {
@@ -33,9 +61,28 @@ void LaneDetection::computeSteeringError()
     s_steeringError = s_laneCenter - s_frameCenter;
 }
 
+void LaneDetection::computeNormalizedSteeringError()
+{
+    // Normalize steering error to [-1, 1] range
+    // Divide by s_frameCenter (which is half the frame width)
+    if (s_frameCenter != 0)
+    {
+        s_normalizedSteeringError = static_cast<float>(s_steeringError) / static_cast<float>(s_frameCenter);
+    }
+    else
+    {
+        s_normalizedSteeringError = 0.0f;
+    }
+}
+
 int LaneDetection::getSteeringError()
 {
     return s_steeringError;
+}
+
+float LaneDetection::getNormalizedSteeringError()
+{
+    return s_normalizedSteeringError;
 }
 
 static void ensureDebugDirectories()
@@ -71,7 +118,7 @@ void LaneDetection::createMask(const cv::Size &frameSize, double frameFormat)
 
     cv::rectangle(
         s_mask,
-        cv::Point(0, static_cast<int>(frameSize.height * 0.45)),
+        cv::Point(0, static_cast<int>(frameSize.height * kRoiTopRatio)),
         cv::Point(frameSize.width, frameSize.height),
         cv::Scalar(255),
         cv::FILLED);
@@ -120,7 +167,7 @@ inline void LaneDetection::edgeDetection()
 
     cv::Mat whiteHSV;
     // broaden saturation and value ranges to be more robust to lighting
-    cv::inRange(hsv, cv::Scalar(0, 0, 110), cv::Scalar(180, 140, 255), whiteHSV);
+    cv::inRange(hsv, cv::Scalar(0, 0, kWhiteMinValue), cv::Scalar(180, kWhiteMaxSaturation, 255), whiteHSV);
     cv::imwrite("debug/mask/02_whiteHSV.png", whiteHSV);
     std::cout << "    whiteHSV non-zero pixels: " << cv::countNonZero(whiteHSV) << "\n";
 
@@ -130,7 +177,7 @@ inline void LaneDetection::edgeDetection()
 
     cv::Mat bright;
     // simple global threshold; may be adjusted (try 180-220)
-    cv::threshold(gray, bright, 130, 255, cv::THRESH_BINARY);
+    cv::threshold(gray, bright, kBrightnessThreshold, 255, cv::THRESH_BINARY);
     cv::imwrite("debug/mask/04_bright.png", bright);
     std::cout << "    bright non-zero pixels: " << cv::countNonZero(bright) << "\n";
 
@@ -150,12 +197,12 @@ inline void LaneDetection::edgeDetection()
 
     // Optional: use Canny edges to give cleaner inputs to HoughLinesP
     cv::Mat edges;
-    cv::Canny(cleaned, edges, 50, 150);
+    cv::Canny(cleaned, edges, kCannyLowThreshold, kCannyHighThreshold);
     cv::imwrite("debug/hough/07_edges.png", edges);
     std::cout << "    edges non-zero pixels: " << cv::countNonZero(edges) << "\n";
 
     // Keep the final output in s_frame only after every intermediate stage is saved.
-    if (cv::countNonZero(edges) > 50)
+    if (cv::countNonZero(edges) > kMinEdgePixelsForCanny)
     {
         s_frame = edges;
     }
@@ -171,7 +218,7 @@ inline void LaneDetection::houghLines()
 
     // Tune parameters: increase minLineLength and reduce maxLineGap
     // for longer continuous markings on tracks.
-    cv::HoughLinesP(s_frame, s_lines, 1, CV_PI / 180, 18, 40, 20);
+    cv::HoughLinesP(s_frame, s_lines, 1, CV_PI / 180, kHoughThreshold, kHoughMinLineLength, kHoughMaxLineGap);
 }
 
 void LaneDetection::classifyLines()
@@ -179,8 +226,8 @@ void LaneDetection::classifyLines()
     s_rightLinePoints.clear();
     s_leftLinePoints.clear();
 
-    const float minSlope = 0.3f;
-    const float maxSlope = 1.5f;
+    const float minSlope = kMinLaneSlope;
+    const float maxSlope = kMaxLaneSlope;
 
     for (const auto &line : s_lines)
     {
@@ -215,8 +262,8 @@ void LaneDetection::leastSquaresRegression()
     float right_m = 0.0f;
     // Use proportional image coordinates for lower/upper interpolation targets
     // Avoid extrapolating all the way to the bottom which amplifies slope noise.
-    int lowerY = static_cast<int>(s_frame.rows * 0.60f); // suggested: 60% down
-    int upperY = static_cast<int>(s_frame.rows * 0.50f); // suggested upper target
+    int lowerY = static_cast<int>(s_frame.rows * kLowerLaneSampleRatio); // lower sample Y
+    int upperY = static_cast<int>(s_frame.rows * kUpperLaneSampleRatio); // upper sample Y
 
     // fit left lane
     if (!s_leftLinePoints.empty())
@@ -503,8 +550,10 @@ void LaneDetection::process(cv::Mat &frame)
 
         computeLaneCenter();
         computeSteeringError();
+        computeNormalizedSteeringError();
         std::cout << "Lane center: " << s_laneCenter << "\n";
         std::cout << "Steering error: " << s_steeringError << "\n";
+        std::cout << "Normalized steering error: " << s_normalizedSteeringError << "\n";
 
         display(frame);
         std::cout << "[7] Display overlay applied\n";

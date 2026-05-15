@@ -36,9 +36,11 @@ class LaneDetection
 	static bool s_previewEnabled;
 	static int s_laneCenter;
 	static int s_steeringError;
+	static float s_normalizedSteeringError;
 
 	static void computeLaneCenter();
 	static void computeSteeringError();
+	static void computeNormalizedSteeringError();
 
 	// Build a lower-image ROI based on expected camera mounting angle.
 	static void createMask(const cv::Size &frameSize, double frameFormat);
@@ -67,4 +69,5 @@ public:
 	static void process(cv::Mat &frame);
 	static void display(cv::Mat &frame);
 	static int getSteeringError();
+	static float getNormalizedSteeringError();
 };
