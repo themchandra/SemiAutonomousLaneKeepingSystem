@@ -1,62 +1,71 @@
+#include <algorithm>
+#include <cstdlib>
 #include <iostream>
 #include <opencv2/opencv.hpp>
-#include <cstdlib>
 #include <string>
-#include <algorithm>
 
 #include "LaneDetection.h"
 #include "Timer.h"
+#include "lane_pipe_writer.h"
 
 namespace {
 
-const char* kDefaultCameraPipeline =
-    "v4l2src device=/dev/video0 ! "
-    "video/x-raw,format=NV12,width=640,height=480 ! "
-    "videoconvert ! "
-    "video/x-raw,format=BGR ! "
-    "appsink";
+    const char *kDefaultCameraPipeline = "v4l2src device=/dev/video0 ! "
+                                         "video/x-raw,format=NV12,width=640,height=480 ! "
+                                         "videoconvert ! "
+                                         "video/x-raw,format=BGR ! "
+                                         "appsink";
 
-bool isPipelineSource(const std::string& source) {
-    return source.find("v4l2src") != std::string::npos
-        || source.find("appsink") != std::string::npos
-        || source.find('!') != std::string::npos;
-}
+    bool isPipelineSource(const std::string &source)
+    {
+        return source.find("v4l2src") != std::string::npos
+            || source.find("appsink") != std::string::npos
+            || source.find('!') != std::string::npos;
+    }
 
-bool isDigitsOnly(const std::string& value) {
-    return !value.empty() && std::all_of(value.begin(), value.end(), [](unsigned char c) {
-        return std::isdigit(c) != 0;
-    });
-}
+    bool isDigitsOnly(const std::string &value)
+    {
+        return !value.empty()
+            && std::all_of(value.begin(), value.end(),
+                           [](unsigned char c) { return std::isdigit(c) != 0; });
+    }
 
-std::string toLower(std::string value) {
-    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
-        return static_cast<char>(std::tolower(c));
-    });
-    return value;
-}
+    std::string toLower(std::string value)
+    {
+        std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
+        return value;
+    }
 
-bool hasExtension(const std::string& source, const std::initializer_list<const char*>& exts) {
-    auto dot = source.find_last_of('.');
-    if (dot == std::string::npos) {
+    bool hasExtension(const std::string &source,
+                      const std::initializer_list<const char *> &exts)
+    {
+        auto dot = source.find_last_of('.');
+        if (dot == std::string::npos) {
+            return false;
+        }
+
+        const std::string ext = toLower(source.substr(dot));
+        for (const char *expected : exts) {
+            if (ext == expected) {
+                return true;
+            }
+        }
         return false;
     }
 
-    const std::string ext = toLower(source.substr(dot));
-    for (const char* expected : exts) {
-        if (ext == expected) {
-            return true;
-        }
+    bool isImagePath(const std::string &source)
+    {
+        return hasExtension(source,
+                            {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"});
     }
-    return false;
-}
 
-bool isImagePath(const std::string& source) {
-    return hasExtension(source, {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"});
-}
-
-bool isVideoPath(const std::string& source) {
-    return hasExtension(source, {".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v", ".mpg", ".mpeg"});
-}
+    bool isVideoPath(const std::string &source)
+    {
+        return hasExtension(
+            source, {".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v", ".mpg", ".mpeg"});
+    }
 
 } // namespace
 
@@ -80,7 +89,7 @@ int main(int argc, const char **argv)
         LaneDetection::prepare(frame.size(), frame.type());
 
         auto globalTimer = new Timer("Loop", 1);
-        auto t = new Timer("Loop");
+        auto t           = new Timer("Loop");
         LaneDetection::process(frame);
         delete t;
         delete globalTimer;
@@ -109,7 +118,7 @@ int main(int argc, const char **argv)
                 opened = cap.open(std::atoi(source.c_str()));
             }
         }
-    } catch (const cv::Exception& e) {
+    } catch (const cv::Exception &e) {
         std::cerr << "OpenCV threw while opening source: " << e.what() << "\n";
         return 2;
     }
@@ -126,6 +135,8 @@ int main(int argc, const char **argv)
         return 3;
     }
 
+    initializeLanePipeWriter();
+
     // Use the actual frame metadata from a valid capture frame.
     LaneDetection::prepare(frame.size(), frame.type());
 
@@ -139,6 +150,8 @@ int main(int argc, const char **argv)
     do {
         auto t = new Timer("Loop");
         LaneDetection::process(frame);
+        const float steering_error = LaneDetection::getNormalizedSteeringError();
+        sendLaneInput(true, steering_error);
         delete t;
     } while (cap.read(frame));
 
