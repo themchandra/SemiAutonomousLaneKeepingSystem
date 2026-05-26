@@ -26,3 +26,15 @@ endif()
 
 # Helpful compile flags
 target_compile_options(lane_detection PRIVATE -Wall -Wextra)
+
+# Add a configurable "run" target so you can pass runtime arguments from CMake.
+# Usage:
+#  cmake -S . -B build -DRUN_ARGS="/full/path/to/image.jpg"
+#  cmake --build build --target run
+set(RUN_ARGS "" CACHE STRING "Arguments to pass to lane_detection at run-time (e.g. '/path/to/image.jpg')")
+add_custom_target(run
+    COMMAND ${CMAKE_COMMAND} -E echo "Running lane_detection ${RUN_ARGS}"
+    COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_CURRENT_BINARY_DIR} $<TARGET_FILE:lane_detection> ${RUN_ARGS}
+    DEPENDS lane_detection
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+)
