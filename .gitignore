@@ -80,3 +80,7 @@ VisualStudio/x64/Release/opencv_world450d.dll
 VisualStudio/x64/Release/opencv_world450d.pdb
 VisualStudio/.vs/LaneKeeping/v16/Browse.VC.db-shm
 VisualStudio/.vs/LaneKeeping/v16/Browse.VC.db-wal
+build/
+debug/
+.DS_Store
+.vscode/
