@@ -15,9 +15,8 @@ namespace
     constexpr float kUpperLaneSampleRatio = 0.47f;
 
     // Color / intensity thresholds for white lane detection
-    constexpr int kWhiteMinValue = 110;       // minimum V (value) for white in HSV
-    constexpr int kWhiteMaxSaturation = 140;  // maximum S (saturation) for white in HSV
-    constexpr int kBrightnessThreshold = 130; // grayscale brightness threshold
+    constexpr int kWhiteMinValue = 170;       // minimum V (value) for white in HSV
+    constexpr int kWhiteMaxSaturation = 50;  // maximum S (saturation) for white in HSV
 
     // Canny edge detector thresholds
     constexpr int kMinEdgePixelsForCanny = 50;
@@ -47,7 +46,6 @@ std::vector<cv::Point> LaneDetection::s_rightLinePoints;
 std::vector<cv::Point> LaneDetection::s_leftLinePoints;
 std::array<cv::Point, 4> LaneDetection::s_boundaries = {};
 bool LaneDetection::s_previewEnabled = true;
-
 int LaneDetection::s_steeringError = 0;
 float LaneDetection::s_normalizedSteeringError = 0.0f;
 
@@ -171,26 +169,10 @@ inline void LaneDetection::edgeDetection()
     cv::imwrite("debug/mask/02_whiteHSV.png", whiteHSV);
     std::cout << "    whiteHSV non-zero pixels: " << cv::countNonZero(whiteHSV) << "\n";
 
-    cv::Mat gray;
-    cv::cvtColor(s_frame, gray, cv::COLOR_BGR2GRAY);
-    cv::imwrite("debug/input/03_gray.png", gray);
-
-    cv::Mat bright;
-    // simple global threshold; may be adjusted (try 180-220)
-    cv::threshold(gray, bright, kBrightnessThreshold, 255, cv::THRESH_BINARY);
-    cv::imwrite("debug/mask/04_bright.png", bright);
-    std::cout << "    bright non-zero pixels: " << cv::countNonZero(bright) << "\n";
-
-    // Combine both masks
-    cv::Mat combined;
-    cv::bitwise_or(whiteHSV, bright, combined);
-    cv::imwrite("debug/mask/05_combined.png", combined);
-    std::cout << "    combined non-zero pixels: " << cv::countNonZero(combined) << "\n";
-
     // Clean mask: open then close to remove small noise and bridge gaps
     cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(5, 5));
     cv::Mat cleaned;
-    cv::morphologyEx(combined, cleaned, cv::MORPH_OPEN, kernel);
+    cv::morphologyEx(whiteHSV, cleaned, cv::MORPH_OPEN, kernel);
     cv::morphologyEx(cleaned, cleaned, cv::MORPH_CLOSE, kernel);
     cv::imwrite("debug/morphology/06_cleaned.png", cleaned);
     std::cout << "    cleaned non-zero pixels: " << cv::countNonZero(cleaned) << "\n";

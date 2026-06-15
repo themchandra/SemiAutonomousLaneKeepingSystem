@@ -71,7 +71,6 @@ int main(int argc, char** argv) {
         frame.convertTo(adjusted, -1, alpha, beta);
         frame = adjusted;
     }
-
     std::cout << "Frame captured: " << frame.cols << 'x' << frame.rows << '\n';
     std::cout << "Image tuning used alpha=" << alpha << ", beta=" << beta << '\n';
 

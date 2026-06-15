@@ -1,0 +1,20 @@
+[
+{
+  "directory": "/Users/michaelchandra/Desktop/Programming Projects/PacerBot/lane_detection/build",
+  "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/c++  -I\"/Users/michaelchandra/Desktop/Programming Projects/PacerBot/lane_detection/VisualStudio/LaneKeeping/include\" -isystem /opt/homebrew/Cellar/opencv/4.13.0_12/include/opencv4 -std=gnu++17 -arch arm64 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk -Wall -Wextra -o CMakeFiles/lane_detection.dir/VisualStudio/LaneKeeping/LaneDetection.cpp.o -c \"/Users/michaelchandra/Desktop/Programming Projects/PacerBot/lane_detection/VisualStudio/LaneKeeping/LaneDetection.cpp\"",
+  "file": "/Users/michaelchandra/Desktop/Programming Projects/PacerBot/lane_detection/VisualStudio/LaneKeeping/LaneDetection.cpp",
+  "output": "CMakeFiles/lane_detection.dir/VisualStudio/LaneKeeping/LaneDetection.cpp.o"
+},
+{
+  "directory": "/Users/michaelchandra/Desktop/Programming Projects/PacerBot/lane_detection/build",
+  "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/c++  -I\"/Users/michaelchandra/Desktop/Programming Projects/PacerBot/lane_detection/VisualStudio/LaneKeeping/include\" -isystem /opt/homebrew/Cellar/opencv/4.13.0_12/include/opencv4 -std=gnu++17 -arch arm64 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk -Wall -Wextra -o CMakeFiles/lane_detection.dir/VisualStudio/LaneKeeping/main.cpp.o -c \"/Users/michaelchandra/Desktop/Programming Projects/PacerBot/lane_detection/VisualStudio/LaneKeeping/main.cpp\"",
+  "file": "/Users/michaelchandra/Desktop/Programming Projects/PacerBot/lane_detection/VisualStudio/LaneKeeping/main.cpp",
+  "output": "CMakeFiles/lane_detection.dir/VisualStudio/LaneKeeping/main.cpp.o"
+},
+{
+  "directory": "/Users/michaelchandra/Desktop/Programming Projects/PacerBot/lane_detection/build",
+  "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/c++  -I\"/Users/michaelchandra/Desktop/Programming Projects/PacerBot/lane_detection/VisualStudio/LaneKeeping/include\" -isystem /opt/homebrew/Cellar/opencv/4.13.0_12/include/opencv4 -std=gnu++17 -arch arm64 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk -Wall -Wextra -o CMakeFiles/lane_detection.dir/VisualStudio/LaneKeeping/src/lane_pipe_writer.cpp.o -c \"/Users/michaelchandra/Desktop/Programming Projects/PacerBot/lane_detection/VisualStudio/LaneKeeping/src/lane_pipe_writer.cpp\"",
+  "file": "/Users/michaelchandra/Desktop/Programming Projects/PacerBot/lane_detection/VisualStudio/LaneKeeping/src/lane_pipe_writer.cpp",
+  "output": "CMakeFiles/lane_detection.dir/VisualStudio/LaneKeeping/src/lane_pipe_writer.cpp.o"
+}
+]
