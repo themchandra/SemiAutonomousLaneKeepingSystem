@@ -135,25 +135,25 @@ int main(int argc, const char **argv)
         return 3;
     }
 
-    initializeLanePipeWriter();
+    // initializeLanePipeWriter();
 
-    // Use the actual frame metadata from a valid capture frame.
-    LaneDetection::prepare(frame.size(), frame.type());
+    // // Use the actual frame metadata from a valid capture frame.
+    // LaneDetection::prepare(frame.size(), frame.type());
 
-    long long frameCount = static_cast<long long>(cap.get(cv::CAP_PROP_FRAME_COUNT));
-    if (frameCount < 0) {
-        frameCount = 0;
-    }
+    // long long frameCount = static_cast<long long>(cap.get(cv::CAP_PROP_FRAME_COUNT));
+    // if (frameCount < 0) {
+    //     frameCount = 0;
+    // }
 
-    auto globalTimer = new Timer("Loop", frameCount);
+    // auto globalTimer = new Timer("Loop", frameCount);
 
-    do {
-        auto t = new Timer("Loop");
-        LaneDetection::process(frame);
-        const float steering_error = LaneDetection::getNormalizedSteeringError();
-        sendLaneInput(true, steering_error);
-        delete t;
-    } while (cap.read(frame));
+    // do {
+    //     auto t = new Timer("Loop");
+    //     LaneDetection::process(frame);
+    //     const float steering_error = LaneDetection::getNormalizedSteeringError();
+    //     sendLaneInput(true, steering_error);
+    //     delete t;
+    // } while (cap.read(frame));
 
-    delete globalTimer;
+    // delete globalTimer;
 }

@@ -2,52 +2,52 @@
 
 #include <cstdlib>
 #include <ctime>
-#include <iostream>
-#include <iomanip>
-#include <sstream>
 #include <filesystem>
+#include <iomanip>
+#include <iostream>
+#include <sstream>
 
-namespace
-{
+namespace {
     // Region-of-interest geometry (fractions of frame height)
-    constexpr float kRoiTopRatio = 0.45f;
+    constexpr float kRoiTopRatio          = 0.45f;
     constexpr float kLowerLaneSampleRatio = 0.57f;
     constexpr float kUpperLaneSampleRatio = 0.47f;
 
     // Color / intensity thresholds for white lane detection
-    constexpr int kWhiteMinValue = 170;       // minimum V (value) for white in HSV
+    constexpr int kWhiteMinValue      = 170; // minimum V (value) for white in HSV
     constexpr int kWhiteMaxSaturation = 50;  // maximum S (saturation) for white in HSV
 
     // Canny edge detector thresholds
     constexpr int kMinEdgePixelsForCanny = 50;
-    constexpr int kCannyLowThreshold = 50;
-    constexpr int kCannyHighThreshold = 150;
+    constexpr int kCannyLowThreshold     = 50;
+    constexpr int kCannyHighThreshold    = 150;
 
     // HoughLinesP parameters
-    constexpr int kHoughThreshold = 18;
+    constexpr int kHoughThreshold     = 18;
     constexpr int kHoughMinLineLength = 40;
-    constexpr int kHoughMaxLineGap = 20;
+    constexpr int kHoughMaxLineGap    = 20;
 
     // Lane slope filtering bounds
     constexpr float kMinLaneSlope = 0.3f;
     constexpr float kMaxLaneSlope = 1.5f;
-}
+} // namespace
 
 cv::Mat LaneDetection::s_frame;
 int LaneDetection::s_frameCenter;
 int LaneDetection::s_maxLineHeight;
 int LaneDetection::s_laneCenter = 0;
-std::array<std::array<cv::Point, 4>, LaneDetection::s_hystheresisCount> LaneDetection::s_hystheresisArray = {{}};
+std::array<std::array<cv::Point, 4>, LaneDetection::s_hystheresisCount>
+    LaneDetection::s_hystheresisArray                   = {{}};
 unsigned short LaneDetection::s_hystheresisArrayCounter = 0;
-bool LaneDetection::s_hystheresisArrayFilled = false;
+bool LaneDetection::s_hystheresisArrayFilled            = false;
 cv::Mat LaneDetection::s_mask;
 std::vector<cv::Vec4i> LaneDetection::s_lines;
 std::vector<cv::Point> LaneDetection::s_rightLinePoints;
 std::vector<cv::Point> LaneDetection::s_leftLinePoints;
 std::array<cv::Point, 4> LaneDetection::s_boundaries = {};
-bool LaneDetection::s_previewEnabled = true;
-int LaneDetection::s_steeringError = 0;
-float LaneDetection::s_normalizedSteeringError = 0.0f;
+bool LaneDetection::s_previewEnabled                 = true;
+int LaneDetection::s_steeringError                   = 0;
+float LaneDetection::s_normalizedSteeringError       = 0.0f;
 
 void LaneDetection::computeLaneCenter()
 {
@@ -63,50 +63,40 @@ void LaneDetection::computeNormalizedSteeringError()
 {
     // Normalize steering error to [-1, 1] range
     // Divide by s_frameCenter (which is half the frame width)
-    if (s_frameCenter != 0)
-    {
-        s_normalizedSteeringError = static_cast<float>(s_steeringError) / static_cast<float>(s_frameCenter);
-    }
-    else
-    {
+    if (s_frameCenter != 0) {
+        s_normalizedSteeringError
+            = static_cast<float>(s_steeringError) / static_cast<float>(s_frameCenter);
+    } else {
         s_normalizedSteeringError = 0.0f;
     }
 }
 
-int LaneDetection::getSteeringError()
-{
-    return s_steeringError;
-}
+int LaneDetection::getSteeringError() { return s_steeringError; }
 
-float LaneDetection::getNormalizedSteeringError()
-{
-    return s_normalizedSteeringError;
-}
+float LaneDetection::getNormalizedSteeringError() { return s_normalizedSteeringError; }
 
 static void ensureDebugDirectories()
 {
     namespace fs = std::filesystem;
-    try
-    {
+    try {
         fs::create_directories("debug/input");
         fs::create_directories("debug/roi");
         fs::create_directories("debug/mask");
         fs::create_directories("debug/morphology");
         fs::create_directories("debug/hough");
         fs::create_directories("debug/final");
-    }
-    catch (const std::exception &e)
-    {
+    } catch (const std::exception &e) {
         std::cerr << "Failed to create debug directories: " << e.what() << "\n";
     }
 }
 
 bool LaneDetection::hasDisplayServer()
 {
-    const char *display = std::getenv("DISPLAY");
+    const char *display        = std::getenv("DISPLAY");
     const char *waylandDisplay = std::getenv("WAYLAND_DISPLAY");
 
-    return (display != nullptr && display[0] != '\0') || (waylandDisplay != nullptr && waylandDisplay[0] != '\0');
+    return (display != nullptr && display[0] != '\0')
+        || (waylandDisplay != nullptr && waylandDisplay[0] != '\0');
 }
 
 void LaneDetection::createMask(const cv::Size &frameSize, double frameFormat)
@@ -114,19 +104,15 @@ void LaneDetection::createMask(const cv::Size &frameSize, double frameFormat)
     (void)frameFormat;
     s_mask = cv::Mat::zeros(frameSize, CV_8UC1);
 
-    cv::rectangle(
-        s_mask,
-        cv::Point(0, static_cast<int>(frameSize.height * kRoiTopRatio)),
-        cv::Point(frameSize.width, frameSize.height),
-        cv::Scalar(255),
-        cv::FILLED);
+    cv::rectangle(s_mask, cv::Point(0, static_cast<int>(frameSize.height * kRoiTopRatio)),
+                  cv::Point(frameSize.width, frameSize.height), cv::Scalar(255),
+                  cv::FILLED);
 }
 
 inline void LaneDetection::applyMask()
 {
 
-    if (s_frame.channels() == 1)
-    {
+    if (s_frame.channels() == 1) {
         cv::bitwise_and(s_frame, s_mask, s_frame);
         return;
     }
@@ -134,8 +120,7 @@ inline void LaneDetection::applyMask()
     std::vector<cv::Mat> channels;
     cv::split(s_frame, channels);
 
-    for (auto &channel : channels)
-    {
+    for (auto &channel : channels) {
         cv::bitwise_and(channel, s_mask, channel);
     }
 
@@ -165,7 +150,8 @@ inline void LaneDetection::edgeDetection()
 
     cv::Mat whiteHSV;
     // broaden saturation and value ranges to be more robust to lighting
-    cv::inRange(hsv, cv::Scalar(0, 0, kWhiteMinValue), cv::Scalar(180, kWhiteMaxSaturation, 255), whiteHSV);
+    cv::inRange(hsv, cv::Scalar(0, 0, kWhiteMinValue),
+                cv::Scalar(180, kWhiteMaxSaturation, 255), whiteHSV);
     cv::imwrite("debug/mask/02_whiteHSV.png", whiteHSV);
     std::cout << "    whiteHSV non-zero pixels: " << cv::countNonZero(whiteHSV) << "\n";
 
@@ -176,7 +162,6 @@ inline void LaneDetection::edgeDetection()
     cv::morphologyEx(cleaned, cleaned, cv::MORPH_CLOSE, kernel);
     cv::imwrite("debug/morphology/06_cleaned.png", cleaned);
     std::cout << "    cleaned non-zero pixels: " << cv::countNonZero(cleaned) << "\n";
-
     // Optional: use Canny edges to give cleaner inputs to HoughLinesP
     cv::Mat edges;
     cv::Canny(cleaned, edges, kCannyLowThreshold, kCannyHighThreshold);
@@ -184,12 +169,9 @@ inline void LaneDetection::edgeDetection()
     std::cout << "    edges non-zero pixels: " << cv::countNonZero(edges) << "\n";
 
     // Keep the final output in s_frame only after every intermediate stage is saved.
-    if (cv::countNonZero(edges) > kMinEdgePixelsForCanny)
-    {
+    if (cv::countNonZero(edges) > kMinEdgePixelsForCanny) {
         s_frame = edges;
-    }
-    else
-    {
+    } else {
         s_frame = cleaned;
     }
 }
@@ -200,7 +182,8 @@ inline void LaneDetection::houghLines()
 
     // Tune parameters: increase minLineLength and reduce maxLineGap
     // for longer continuous markings on tracks.
-    cv::HoughLinesP(s_frame, s_lines, 1, CV_PI / 180, kHoughThreshold, kHoughMinLineLength, kHoughMaxLineGap);
+    cv::HoughLinesP(s_frame, s_lines, 1, CV_PI / 180, kHoughThreshold,
+                    kHoughMinLineLength, kHoughMaxLineGap);
 }
 
 void LaneDetection::classifyLines()
@@ -208,28 +191,26 @@ void LaneDetection::classifyLines()
     s_rightLinePoints.clear();
     s_leftLinePoints.clear();
 
-    const float minSlope = kMinLaneSlope;
-    const float maxSlope = kMaxLaneSlope;
+    for (const auto &line : s_lines) {
 
-    for (const auto &line : s_lines)
-    {
 
         // slope = (y1 - y0) / (x1 - x0)
         float slope = static_cast<float>(line[3] - line[1]);
         slope /= (static_cast<float>(line[2] - line[0]) + 0.00001f);
 
-        // filter too horizontal slopes
-        float absSlope = std::fabs(slope);
-        if (absSlope < minSlope || absSlope > maxSlope)
-            continue;
+        float midX = (line[0] + line[2]) / 2.0f;
 
-        if (slope > 0 && line[2] > s_frameCenter && line[0] > s_frameCenter)
-        {
+        std::cout << "Line: (" << line[0] << "," << line[1] << ") -> (" << line[2] << ","
+                  << line[3] << ")"
+                  << " slope=" << slope << " midX=" << midX << "\n";
+        if (midX < 100) {
+            continue;
+        }
+
+        if (slope > 0 && line[2] > s_frameCenter && line[0] > s_frameCenter) {
             s_rightLinePoints.push_back(cv::Point(line[0], line[1]));
             s_rightLinePoints.push_back(cv::Point(line[2], line[3]));
-        }
-        else if (slope < 0 && line[2] < s_frameCenter && line[0] < s_frameCenter)
-        {
+        } else if (slope < 0 && line[2] < s_frameCenter && line[0] < s_frameCenter) {
             s_leftLinePoints.push_back(cv::Point(line[0], line[1]));
             s_leftLinePoints.push_back(cv::Point(line[2], line[3]));
         }
@@ -240,37 +221,39 @@ void LaneDetection::leastSquaresRegression()
 {
 
     std::array<float, 4> xPositions = {0.f, 0.f, 0.f, 0.f};
-    float left_m = 0.0f;
-    float right_m = 0.0f;
+    float left_m                    = 0.0f;
+    float right_m                   = 0.0f;
     // Use proportional image coordinates for lower/upper interpolation targets
     // Avoid extrapolating all the way to the bottom which amplifies slope noise.
     int lowerY = static_cast<int>(s_frame.rows * kLowerLaneSampleRatio); // lower sample Y
     int upperY = static_cast<int>(s_frame.rows * kUpperLaneSampleRatio); // upper sample Y
 
     // fit left lane
-    if (!s_leftLinePoints.empty())
-    {
+    if (!s_leftLinePoints.empty()) {
         cv::Vec4d left_line;
 
         cv::fitLine(s_leftLinePoints, left_line, cv::DIST_L2, 0, 0.01, 0.01);
-        left_m = left_line[1] / left_line[0];
+        left_m           = left_line[1] / left_line[0];
         cv::Point left_b = cv::Point(left_line[2], left_line[3]);
 
-        xPositions[0] = (static_cast<float>(lowerY - left_b.y) / left_m) + left_b.x; // lower
-        xPositions[1] = (static_cast<float>(upperY - left_b.y) / left_m) + left_b.x; // upper
+        xPositions[0]
+            = (static_cast<float>(lowerY - left_b.y) / left_m) + left_b.x; // lower
+        xPositions[1]
+            = (static_cast<float>(upperY - left_b.y) / left_m) + left_b.x; // upper
     }
 
     // fit right lane
-    if (!s_rightLinePoints.empty())
-    {
+    if (!s_rightLinePoints.empty()) {
         cv::Vec4d right_line;
 
         cv::fitLine(s_rightLinePoints, right_line, cv::DIST_L2, 0, 0.01, 0.01);
-        right_m = right_line[1] / right_line[0];
+        right_m           = right_line[1] / right_line[0];
         cv::Point right_b = cv::Point(right_line[2], right_line[3]); // y = m*x + b
 
-        xPositions[2] = (static_cast<float>(lowerY - right_b.y) / right_m) + right_b.x; // lower
-        xPositions[3] = (static_cast<float>(upperY - right_b.y) / right_m) + right_b.x; // upper
+        xPositions[2]
+            = (static_cast<float>(lowerY - right_b.y) / right_m) + right_b.x; // lower
+        xPositions[3]
+            = (static_cast<float>(upperY - right_b.y) / right_m) + right_b.x; // upper
     }
     std::cout << "Raw xPositions before clamp: "
 
@@ -286,21 +269,19 @@ void LaneDetection::leastSquaresRegression()
     std::cout << "Right m: " << right_m << "\n";
 
     // Clamp x positions to image bounds
-    auto clampX = [](float x, int width)
-    {
-        return std::max(0.0f,
-                        std::min(x, static_cast<float>(width - 1)));
+    auto clampX = [](float x, int width) {
+        return std::max(0.0f, std::min(x, static_cast<float>(width - 1)));
     };
 
-    for (float &x : xPositions)
-    {
+    for (float &x : xPositions) {
         x = clampX(x, s_frame.cols);
     }
 
     hystheresis(xPositions, lowerY, upperY);
 }
 
-inline void LaneDetection::hystheresis(std::array<float, 4> xPositions, int lowerY, int upperY)
+inline void LaneDetection::hystheresis(std::array<float, 4> xPositions, int lowerY,
+                                       int upperY)
 {
 
     s_hystheresisArray[s_hystheresisArrayCounter][0] = cv::Point(xPositions[0], lowerY);
@@ -309,35 +290,30 @@ inline void LaneDetection::hystheresis(std::array<float, 4> xPositions, int lowe
     s_hystheresisArray[s_hystheresisArrayCounter][3] = cv::Point(xPositions[3], upperY);
 
 #ifdef USE_HYSTHERESIS
-    if (s_hystheresisArrayFilled)
-    {
+    if (s_hystheresisArrayFilled) {
 
         std::array<cv::Point, 4> previousRow;
-        if (s_hystheresisArrayCounter == 0)
-        {
+        if (s_hystheresisArrayCounter == 0) {
             previousRow = s_hystheresisArray[s_hystheresisCount - 1];
-        }
-        else
-        {
+        } else {
             previousRow = s_hystheresisArray[s_hystheresisArrayCounter - 1];
         }
 
         const int maxLowerDiff = 0.01f * s_frame.cols;
         const int maxUpperDiff = 0.004f * s_frame.cols;
 
-        std::array<int, 4> maxDiff = {maxLowerDiff, maxUpperDiff, maxLowerDiff, maxUpperDiff};
+        std::array<int, 4> maxDiff
+            = {maxLowerDiff, maxUpperDiff, maxLowerDiff, maxUpperDiff};
         std::array<int, 4> avgXPositions = {};
 
         // unsigned short attempts = 0;
 
         // average over whole array (excluding 0-values)
-        for (unsigned short i = 0; i < 4; i++)
-        {
+        for (unsigned short i = 0; i < 4; i++) {
             unsigned short skipped = 0;
-            int avg = 0;
+            int avg                = 0;
 
-            for (unsigned short j = 0; j < s_hystheresisCount; j++)
-            {
+            for (unsigned short j = 0; j < s_hystheresisCount; j++) {
 
                 if (s_hystheresisArray[j][i].x == 0)
                     skipped++;
@@ -345,8 +321,7 @@ inline void LaneDetection::hystheresis(std::array<float, 4> xPositions, int lowe
             }
 
             avgXPositions[i] = avg;
-            if (s_hystheresisCount == skipped)
-            {
+            if (s_hystheresisCount == skipped) {
                 errorHandler();
                 return;
             }
@@ -355,9 +330,8 @@ inline void LaneDetection::hystheresis(std::array<float, 4> xPositions, int lowe
             bool reCalculate = false;
             for (unsigned short j = 0; j < s_hystheresisCount; j++) {
 
-                if (s_hystheresisArray[j][i].x != 0 && s_hystheresisArray[j][i].x * 5 < avg) {
-                    reCalculate = true;
-                    break;
+                if (s_hystheresisArray[j][i].x != 0 && s_hystheresisArray[j][i].x * 5 <
+            avg) { reCalculate = true; break;
                 }
             }
 
@@ -371,20 +345,21 @@ inline void LaneDetection::hystheresis(std::array<float, 4> xPositions, int lowe
             }
             */
             int diff = avgXPositions[i] - previousRow[i].x;
-            if (diff > maxDiff[i])
-            {
+            if (diff > maxDiff[i]) {
                 avgXPositions[i] = previousRow[i].x + maxDiff[i];
-            }
-            else if (diff < -1 * maxDiff[i])
-            {
+            } else if (diff < -1 * maxDiff[i]) {
                 avgXPositions[i] = previousRow[i].x - maxDiff[i];
             }
         }
 
-        s_hystheresisArray[s_hystheresisArrayCounter][0] = cv::Point(avgXPositions[0], lowerY);
-        s_hystheresisArray[s_hystheresisArrayCounter][1] = cv::Point(avgXPositions[1], upperY);
-        s_hystheresisArray[s_hystheresisArrayCounter][2] = cv::Point(avgXPositions[2], lowerY);
-        s_hystheresisArray[s_hystheresisArrayCounter][3] = cv::Point(avgXPositions[3], upperY);
+        s_hystheresisArray[s_hystheresisArrayCounter][0]
+            = cv::Point(avgXPositions[0], lowerY);
+        s_hystheresisArray[s_hystheresisArrayCounter][1]
+            = cv::Point(avgXPositions[1], upperY);
+        s_hystheresisArray[s_hystheresisArrayCounter][2]
+            = cv::Point(avgXPositions[2], lowerY);
+        s_hystheresisArray[s_hystheresisArrayCounter][3]
+            = cv::Point(avgXPositions[3], upperY);
     }
 
 #endif
@@ -395,10 +370,9 @@ inline void LaneDetection::hystheresis(std::array<float, 4> xPositions, int lowe
     s_boundaries[2] = s_hystheresisArray[s_hystheresisArrayCounter][3];
 
     s_hystheresisArrayCounter++;
-    if (s_hystheresisArrayCounter == s_hystheresisCount)
-    {
+    if (s_hystheresisArrayCounter == s_hystheresisCount) {
         s_hystheresisArrayCounter = 0;
-        s_hystheresisArrayFilled = true;
+        s_hystheresisArrayFilled  = true;
     }
 }
 
@@ -406,47 +380,39 @@ void LaneDetection::errorHandler()
 {
     std::cerr << "An error has occured!\n";
 
-    try
-    {
+    try {
         std::cerr << "Frame size: " << s_frame.cols << "x" << s_frame.rows << "\n";
-        int nonZeroFrame = cv::countNonZero((s_frame.channels() == 1) ? s_frame : cv::Mat());
-        if (s_frame.channels() != 1)
-        {
+        int nonZeroFrame
+            = cv::countNonZero((s_frame.channels() == 1) ? s_frame : cv::Mat());
+        if (s_frame.channels() != 1) {
             cv::Mat gray;
             cv::cvtColor(s_frame, gray, cv::COLOR_BGR2GRAY);
             nonZeroFrame = cv::countNonZero(gray);
         }
         std::cerr << "Non-zero pixels in processed frame: " << nonZeroFrame << "\n";
         std::cerr << "Mask present: " << (s_mask.empty() ? "no" : "yes") << "\n";
-        if (!s_mask.empty())
-        {
+        if (!s_mask.empty()) {
             std::cerr << "Non-zero pixels in mask: " << cv::countNonZero(s_mask) << "\n";
         }
         std::cerr << "Hough lines detected: " << s_lines.size() << "\n";
 
         // Save debugging artifacts to disk with timestamp
-        std::time_t t = std::time(nullptr);
+        std::time_t t  = std::time(nullptr);
         std::string ts = std::to_string(static_cast<long long>(t));
-        try
-        {
-            if (!s_frame.empty())
-            {
-                cv::imwrite(std::string("debug/input/debug_frame_") + ts + ".png", s_frame);
+        try {
+            if (!s_frame.empty()) {
+                cv::imwrite(std::string("debug/input/debug_frame_") + ts + ".png",
+                            s_frame);
                 std::cerr << "Wrote debug/input/debug_frame_" << ts << ".png\n";
             }
-            if (!s_mask.empty())
-            {
+            if (!s_mask.empty()) {
                 cv::imwrite(std::string("debug/mask/debug_mask_") + ts + ".png", s_mask);
                 std::cerr << "Wrote debug/mask/debug_mask_" << ts << ".png\n";
             }
-        }
-        catch (const cv::Exception &e)
-        {
+        } catch (const cv::Exception &e) {
             std::cerr << "Failed writing debug images: " << e.what() << "\n";
         }
-    }
-    catch (const std::exception &e)
-    {
+    } catch (const std::exception &e) {
         std::cerr << "Error handler failure: " << e.what() << "\n";
     }
 }
@@ -454,23 +420,19 @@ void LaneDetection::errorHandler()
 void LaneDetection::prepare(const cv::Size &frameSize, double frameFormat)
 {
     createMask(frameSize, frameFormat);
-    s_frameCenter = frameSize.width / 2;
-    s_maxLineHeight = static_cast<int>(0.66f * frameSize.height);
+    s_frameCenter    = frameSize.width / 2;
+    s_maxLineHeight  = static_cast<int>(0.66f * frameSize.height);
     s_previewEnabled = hasDisplayServer();
 
     // Ensure debug folders exist
     ensureDebugDirectories();
 
-    if (!s_previewEnabled)
-    {
+    if (!s_previewEnabled) {
         std::cerr << "No display server detected, disabling preview window.\n";
     }
 }
 
-void LaneDetection::setFrame(const cv::Mat &frame)
-{
-    s_frame = frame;
-}
+void LaneDetection::setFrame(const cv::Mat &frame) { s_frame = frame; }
 
 void LaneDetection::process(cv::Mat &frame)
 {
@@ -481,7 +443,8 @@ void LaneDetection::process(cv::Mat &frame)
     std::string ts = ss.str();
 
     std::cout << "\n=== Lane Detection Pipeline Debug ===";
-    std::cout << "\nStarting process() with frame size: " << frame.cols << "x" << frame.rows << "\n";
+    std::cout << "\nStarting process() with frame size: " << frame.cols << "x"
+              << frame.rows << "\n";
 
     setFrame(frame);
     std::cout << "[1] Original image loaded\n";
@@ -497,26 +460,24 @@ void LaneDetection::process(cv::Mat &frame)
     std::cout << "[4] Line segments detected: " << s_lines.size() << " lines\n";
 
     // Visualize detected line segments for debugging
-    if (!s_lines.empty())
-    {
+    if (!s_lines.empty()) {
         cv::Mat houghVis = frame.clone();
-        for (const auto &line : s_lines)
-        {
+        for (const auto &line : s_lines) {
             cv::line(houghVis, cv::Point(line[0], line[1]), cv::Point(line[2], line[3]),
                      cv::Scalar(0, 255, 0), 2, cv::LINE_AA);
         }
-        std::cout << "    Saving line segments visualization to debug/hough/03_line_segments_" << ts << ".png\n";
+        std::cout
+            << "    Saving line segments visualization to debug/hough/03_line_segments_"
+            << ts << ".png\n";
         cv::imwrite(std::string("debug/hough/03_line_segments_") + ts + ".png", houghVis);
     }
 
-    if (!s_lines.empty())
-    {
+    if (!s_lines.empty()) {
         classifyLines(); // filter lane lines (left/right classification)
         std::cout << "[5] Lane lines filtered - Left points: " << s_leftLinePoints.size()
                   << ", Right points: " << s_rightLinePoints.size() << "\n";
 
-        if (s_leftLinePoints.empty() || s_rightLinePoints.empty())
-        {
+        if (s_leftLinePoints.empty() || s_rightLinePoints.empty()) {
             std::cout << "[X] ERROR: Not enough classified lane points!\n";
             errorHandler();
             return;
@@ -525,10 +486,14 @@ void LaneDetection::process(cv::Mat &frame)
         leastSquaresRegression(); // calculate lane regression
         std::cout << "[6] Least squares regression complete\n";
         std::cout << "    Boundary points:\n";
-        std::cout << "      Left lower:  (" << s_boundaries[0].x << ", " << s_boundaries[0].y << ")\n";
-        std::cout << "      Left upper:  (" << s_boundaries[1].x << ", " << s_boundaries[1].y << ")\n";
-        std::cout << "      Right lower: (" << s_boundaries[3].x << ", " << s_boundaries[3].y << ")\n";
-        std::cout << "      Right upper: (" << s_boundaries[2].x << ", " << s_boundaries[2].y << ")\n";
+        std::cout << "      Left lower:  (" << s_boundaries[0].x << ", "
+                  << s_boundaries[0].y << ")\n";
+        std::cout << "      Left upper:  (" << s_boundaries[1].x << ", "
+                  << s_boundaries[1].y << ")\n";
+        std::cout << "      Right lower: (" << s_boundaries[3].x << ", "
+                  << s_boundaries[3].y << ")\n";
+        std::cout << "      Right upper: (" << s_boundaries[2].x << ", "
+                  << s_boundaries[2].y << ")\n";
 
         computeLaneCenter();
         computeSteeringError();
@@ -539,11 +504,10 @@ void LaneDetection::process(cv::Mat &frame)
 
         display(frame);
         std::cout << "[7] Display overlay applied\n";
-        std::cout << "    Saving final output to debug/final/04_output_" << ts << ".png\n";
+        std::cout << "    Saving final output to debug/final/04_output_" << ts
+                  << ".png\n";
         cv::imwrite(std::string("debug/final/04_output_") + ts + ".png", frame);
-    }
-    else
-    {
+    } else {
         std::cout << "[X] ERROR: No lines detected!\n";
         errorHandler();
     }
@@ -558,26 +522,25 @@ void LaneDetection::display(cv::Mat &frame)
     frame.copyTo(output);
 
     // create semi-transparent trapezoid
-    cv::fillConvexPoly(output, s_boundaries.data(), 4, cv::Scalar(255, 255, 255), cv::LINE_AA, 0);
+    cv::fillConvexPoly(output, s_boundaries.data(), 4, cv::Scalar(255, 255, 255),
+                       cv::LINE_AA, 0);
     cv::addWeighted(output, 0.4, frame, 0.6, 0, frame);
 
     // draw left & right lane
-    cv::line(frame, s_boundaries[0], s_boundaries[1], cv::Scalar(255, 255, 255), 7, cv::LINE_AA);
-    cv::line(frame, s_boundaries[2], s_boundaries[3], cv::Scalar(255, 255, 255), 7, cv::LINE_AA);
+    cv::line(frame, s_boundaries[0], s_boundaries[1], cv::Scalar(255, 255, 255), 7,
+             cv::LINE_AA);
+    cv::line(frame, s_boundaries[2], s_boundaries[3], cv::Scalar(255, 255, 255), 7,
+             cv::LINE_AA);
 
-    if (!s_previewEnabled)
-    {
+    if (!s_previewEnabled) {
         return;
     }
 
-    try
-    {
+    try {
         // Display processed frame when GUI backend is available.
         cv::imshow("Lane detection", frame);
         cv::waitKey(1);
-    }
-    catch (const cv::Exception &e)
-    {
+    } catch (const cv::Exception &e) {
         std::cerr << "Preview disabled: " << e.what() << "\n";
         s_previewEnabled = false;
     }
