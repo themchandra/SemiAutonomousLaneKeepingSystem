@@ -3,6 +3,11 @@
 #include <opencv2/opencv.hpp>
 #include <vector>
 
+struct LaneInfo {
+      float normalizedSteeringError = 0.0f;
+      bool valid = false;
+    };
+
 class LaneDetection {
 
 // Enable a short temporal smoothing buffer to stabilize detection
@@ -45,8 +50,6 @@ class LaneDetection {
     // Build a lower-image ROI based on expected camera mounting angle.
     static void createMask(const cv::Size &frameSize, double frameFormat);
     inline static void applyMask();
-    inline static void changeContrast();
-    inline static void blur();
 
     // Extract likely white lane markings and convert them into an edge image.
     inline static void edgeDetection();
@@ -67,7 +70,10 @@ class LaneDetection {
   public:
     static void prepare(const cv::Size &frameSize, double frameFormat);
     static void setFrame(const cv::Mat &frame);
-    static void process(cv::Mat &frame);
+
+    // takes in a frame (of a track image with lane boundaries) and returns normalized
+    // error of the frame center compared to the lane center between [-1,1]
+    static LaneInfo process(cv::Mat &frame);
     static void display(cv::Mat &frame);
     static int getSteeringError();
     static float getNormalizedSteeringError();

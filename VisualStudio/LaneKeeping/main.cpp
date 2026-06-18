@@ -5,9 +5,8 @@
 #include <string>
 
 #include "LaneDetection.h"
-#include "Timer.h"
-#include "lane_pipe_writer.h"
 
+// private functions 
 namespace {
 
     const char *kDefaultCameraPipeline = "v4l2src device=/dev/video0 ! "
@@ -72,23 +71,16 @@ namespace {
         cv::Mat frame;
         frame = cv::imread(source, cv::IMREAD_COLOR);
 
-        // error loading image
         if (frame.empty()) {
             std::cerr << "Failed to load image: " << source << "\n";
             return 1;
         }
-
-        // resize the provided image to 640 x 480
         cv::resize(frame, frame, cv::Size(640, 480));
-
         std::cout << "Image loaded successfully: " << source << "\n";
 
         // prepare image and run through lane detection pipeline
         LaneDetection::prepare(frame.size(), frame.type());
         LaneDetection::process(frame);
-
-        // Keep window open for image mode if preview is enabled.
-        cv::waitKey(0);
         return 0;
     }
 
@@ -104,45 +96,43 @@ int main(int argc, const char **argv)
         source = argv[1];
     }
 
-    // cv::Mat frame;
-
     if (isImagePath(source)) {
         return runImageMode(source);
     }
 
-    cv::VideoCapture cap;
-    bool opened = false;
-    try {
-        if (isPipelineSource(source)) {
-            opened = cap.open(source, cv::CAP_GSTREAMER);
-        } else if (isVideoPath(source)) {
-            opened = cap.open(source);
-        } else if (isDigitsOnly(source)) {
-            opened = cap.open(std::atoi(source.c_str()));
-        } else {
-            // Fallback: try opening as file/URL first, then as camera index.
-            opened = cap.open(source);
-            if (!opened && cap.isOpened()) {
-                cap.release();
-            }
-            if (!opened) {
-                opened = cap.open(std::atoi(source.c_str()));
-            }
-        }
-    } catch (const cv::Exception &e) {
-        std::cerr << "OpenCV threw while opening source: " << e.what() << "\n";
-        return 2;
-    }
-
-    if (!opened || !cap.isOpened()) {
-        std::cerr << "Failed to open source: " << source << "\n";
-        return 1;
-    }
-
-    std::cout << "Source opened successfully: " << source << "\n";
-
-    // if (!cap.read(frame) || frame.empty()) {
-    //     std::cerr << "Failed to read first frame from source.\n";
-    //     return 3;
+    // cv::VideoCapture cap;
+    // bool opened = false;
+    // try {
+    //     if (isPipelineSource(source)) {
+    //         opened = cap.open(source, cv::CAP_GSTREAMER);
+    //     } else if (isVideoPath(source)) {
+    //         opened = cap.open(source);
+    //     } else if (isDigitsOnly(source)) {
+    //         opened = cap.open(std::atoi(source.c_str()));
+    //     } else {
+    //         // Fallback: try opening as file/URL first, then as camera index.
+    //         opened = cap.open(source);
+    //         if (!opened && cap.isOpened()) {
+    //             cap.release();
+    //         }
+    //         if (!opened) {
+    //             opened = cap.open(std::atoi(source.c_str()));
+    //         }
+    //     }
+    // } catch (const cv::Exception &e) {
+    //     std::cerr << "OpenCV threw while opening source: " << e.what() << "\n";
+    //     return 2;
     // }
+
+    // if (!opened || !cap.isOpened()) {
+    //     std::cerr << "Failed to open source: " << source << "\n";
+    //     return 1;
+    // }
+
+    // std::cout << "Source opened successfully: " << source << "\n";
+
+    // // if (!cap.read(frame) || frame.empty()) {
+    // //     std::cerr << "Failed to read first frame from source.\n";
+    // //     return 3;
+    // // }
 }

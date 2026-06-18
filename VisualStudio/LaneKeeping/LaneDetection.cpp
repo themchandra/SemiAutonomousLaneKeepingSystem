@@ -1,4 +1,5 @@
 #include "LaneDetection.h"
+#include "lane_pipe_writer.h"
 
 #include <cstdlib>
 #include <ctime>
@@ -15,7 +16,7 @@ namespace {
     constexpr float kUpperLaneSampleRatio = 0.47f;
 
     // Color / intensity thresholds for white lane detection
-    
+
     constexpr int kWhiteMinValue      = 170; // minimum V (value) for white in HSV
     constexpr int kWhiteMaxSaturation = 50;  // maximum S (saturation) for white in HSV
 
@@ -29,9 +30,6 @@ namespace {
     constexpr int kHoughMinLineLength = 40;
     constexpr int kHoughMaxLineGap    = 20;
 
-    // Lane slope filtering bounds
-    constexpr float kMinLaneSlope = 0.3f;
-    constexpr float kMaxLaneSlope = 1.5f;
 } // namespace
 
 cv::Mat LaneDetection::s_frame;
@@ -77,7 +75,7 @@ int LaneDetection::getSteeringError() { return s_steeringError; }
 
 float LaneDetection::getNormalizedSteeringError() { return s_normalizedSteeringError; }
 
-static void ensureDebugDirectories()
+static void createDebugDirectories()
 {
     namespace fs = std::filesystem;
     try {
@@ -127,16 +125,6 @@ inline void LaneDetection::applyMask()
     }
 
     cv::merge(channels, s_frame);
-}
-
-inline void LaneDetection::changeContrast()
-{
-    // cv::convertScaleAbs(s_frame, s_frame, 1.3, 0);
-}
-
-inline void LaneDetection::blur()
-{
-    cv::GaussianBlur(s_frame, s_frame, cv::Size(7, 7), 0, 0); // 7x7px trial & error
 }
 
 inline void LaneDetection::edgeDetection()
@@ -425,7 +413,7 @@ void LaneDetection::prepare(const cv::Size &frameSize, double frameFormat)
     s_previewEnabled = hasDisplayServer();
 
     // Ensure debug folders exist
-    ensureDebugDirectories();
+    createDebugDirectories();
 
     if (!s_previewEnabled) {
         std::cerr << "No display server detected, disabling preview window.\n";
@@ -434,10 +422,12 @@ void LaneDetection::prepare(const cv::Size &frameSize, double frameFormat)
 
 void LaneDetection::setFrame(const cv::Mat &frame) { s_frame = frame; }
 
-void LaneDetection::process(cv::Mat &frame)
+LaneInfo LaneDetection::process(cv::Mat &frame)
 {
+    LaneInfo info;
     // Generate timestamp for debug images
-    std::time_t t = std::time(nullptr); // gathers timestamp (number of seconds since 00:00 1970)
+    std::time_t t
+        = std::time(nullptr); // gathers timestamp (number of seconds since 00:00 1970)
     std::stringstream ss;
     ss << std::setfill('0') << std::setw(10) << static_cast<long long>(t);
     std::string ts = ss.str();
@@ -480,24 +470,15 @@ void LaneDetection::process(cv::Mat &frame)
         if (s_leftLinePoints.empty() || s_rightLinePoints.empty()) {
             std::cout << "[X] ERROR: Not enough classified lane points!\n";
             errorHandler();
-            return;
+            return info;
         }
 
         leastSquaresRegression(); // calculate lane regression
-        std::cout << "[6] Least squares regression complete\n";
-        std::cout << "    Boundary points:\n";
-        std::cout << "      Left lower:  (" << s_boundaries[0].x << ", "
-                  << s_boundaries[0].y << ")\n";
-        std::cout << "      Left upper:  (" << s_boundaries[1].x << ", "
-                  << s_boundaries[1].y << ")\n";
-        std::cout << "      Right lower: (" << s_boundaries[3].x << ", "
-                  << s_boundaries[3].y << ")\n";
-        std::cout << "      Right upper: (" << s_boundaries[2].x << ", "
-                  << s_boundaries[2].y << ")\n";
-
         computeLaneCenter();
         computeSteeringError();
         computeNormalizedSteeringError();
+        info.normalizedSteeringError = s_normalizedSteeringError;
+        info.valid                   = true;
         std::cout << "Lane center: " << s_laneCenter << "\n";
         std::cout << "Steering error: " << s_steeringError << "\n";
         std::cout << "Normalized steering error: " << s_normalizedSteeringError << "\n";
@@ -510,9 +491,11 @@ void LaneDetection::process(cv::Mat &frame)
     } else {
         std::cout << "[X] ERROR: No lines detected!\n";
         errorHandler();
+        return info;
     }
 
     std::cout << "=== Pipeline Complete ===\n";
+    return info;
 }
 
 void LaneDetection::display(cv::Mat &frame)
