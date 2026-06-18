@@ -67,36 +67,47 @@ namespace {
             source, {".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v", ".mpg", ".mpeg"});
     }
 
-} // namespace
-
-int main(int argc, const char **argv)
-{
-    std::string source = kDefaultCameraPipeline;
-    if (argc > 1) {
-        source = argv[1];
-    }
-
-    cv::Mat frame;
-
-    if (isImagePath(source)) {
+    int runImageMode(const std::string &source)
+    {
+        cv::Mat frame;
         frame = cv::imread(source, cv::IMREAD_COLOR);
+
+        // error loading image
         if (frame.empty()) {
             std::cerr << "Failed to load image: " << source << "\n";
             return 1;
         }
-        cv::resize(frame, frame, cv::Size(640, 480));
-        std::cout << "Image loaded successfully: " << source << "\n";
-        LaneDetection::prepare(frame.size(), frame.type());
 
-        auto globalTimer = new Timer("Loop", 1);
-        auto t           = new Timer("Loop");
+        // resize the provided image to 640 x 480
+        cv::resize(frame, frame, cv::Size(640, 480));
+
+        std::cout << "Image loaded successfully: " << source << "\n";
+
+        // prepare image and run through lane detection pipeline
+        LaneDetection::prepare(frame.size(), frame.type());
         LaneDetection::process(frame);
-        delete t;
-        delete globalTimer;
 
         // Keep window open for image mode if preview is enabled.
         cv::waitKey(0);
         return 0;
+    }
+
+} // namespace
+
+int main(int argc, const char **argv)
+{
+    // Use default GStreamer source if no source provided
+    std::string source = kDefaultCameraPipeline;
+
+    // Use command line source if specified
+    if (argc > 1) {
+        source = argv[1];
+    }
+
+    // cv::Mat frame;
+
+    if (isImagePath(source)) {
+        return runImageMode(source);
     }
 
     cv::VideoCapture cap;
@@ -130,30 +141,8 @@ int main(int argc, const char **argv)
 
     std::cout << "Source opened successfully: " << source << "\n";
 
-    if (!cap.read(frame) || frame.empty()) {
-        std::cerr << "Failed to read first frame from source.\n";
-        return 3;
-    }
-
-    // initializeLanePipeWriter();
-
-    // // Use the actual frame metadata from a valid capture frame.
-    // LaneDetection::prepare(frame.size(), frame.type());
-
-    // long long frameCount = static_cast<long long>(cap.get(cv::CAP_PROP_FRAME_COUNT));
-    // if (frameCount < 0) {
-    //     frameCount = 0;
+    // if (!cap.read(frame) || frame.empty()) {
+    //     std::cerr << "Failed to read first frame from source.\n";
+    //     return 3;
     // }
-
-    // auto globalTimer = new Timer("Loop", frameCount);
-
-    // do {
-    //     auto t = new Timer("Loop");
-    //     LaneDetection::process(frame);
-    //     const float steering_error = LaneDetection::getNormalizedSteeringError();
-    //     sendLaneInput(true, steering_error);
-    //     delete t;
-    // } while (cap.read(frame));
-
-    // delete globalTimer;
 }

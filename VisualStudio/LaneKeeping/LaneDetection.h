@@ -20,6 +20,7 @@ class LaneDetection {
     static unsigned short s_hystheresisArrayCounter;
     static bool s_hystheresisArrayFilled;
     static cv::Mat s_mask;
+    
 
     // Intermediate Hough output (vector of detected line segments)
     static std::vector<cv::Vec4i> s_lines;

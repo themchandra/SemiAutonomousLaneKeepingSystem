@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
+#include <opencv2/core/mat.hpp>
 #include <sstream>
 
 namespace {
@@ -14,6 +15,7 @@ namespace {
     constexpr float kUpperLaneSampleRatio = 0.47f;
 
     // Color / intensity thresholds for white lane detection
+    
     constexpr int kWhiteMinValue      = 170; // minimum V (value) for white in HSV
     constexpr int kWhiteMaxSaturation = 50;  // maximum S (saturation) for white in HSV
 
@@ -147,7 +149,6 @@ inline void LaneDetection::edgeDetection()
     cv::Mat hsv;
     cv::cvtColor(s_frame, hsv, cv::COLOR_BGR2HSV);
     cv::imwrite("debug/input/01_hsv.png", hsv);
-
     cv::Mat whiteHSV;
     // broaden saturation and value ranges to be more robust to lighting
     cv::inRange(hsv, cv::Scalar(0, 0, kWhiteMinValue),
@@ -265,7 +266,6 @@ void LaneDetection::leastSquaresRegression()
 
               << xPositions[3] << "\n";
     std::cout << "Left m: " << left_m << "\n";
-
     std::cout << "Right m: " << right_m << "\n";
 
     // Clamp x positions to image bounds
@@ -437,7 +437,7 @@ void LaneDetection::setFrame(const cv::Mat &frame) { s_frame = frame; }
 void LaneDetection::process(cv::Mat &frame)
 {
     // Generate timestamp for debug images
-    std::time_t t = std::time(nullptr);
+    std::time_t t = std::time(nullptr); // gathers timestamp (number of seconds since 00:00 1970)
     std::stringstream ss;
     ss << std::setfill('0') << std::setw(10) << static_cast<long long>(t);
     std::string ts = ss.str();
@@ -517,7 +517,6 @@ void LaneDetection::process(cv::Mat &frame)
 
 void LaneDetection::display(cv::Mat &frame)
 {
-
     cv::Mat output;
     frame.copyTo(output);
 
@@ -525,7 +524,6 @@ void LaneDetection::display(cv::Mat &frame)
     cv::fillConvexPoly(output, s_boundaries.data(), 4, cv::Scalar(255, 255, 255),
                        cv::LINE_AA, 0);
     cv::addWeighted(output, 0.4, frame, 0.6, 0, frame);
-
     // draw left & right lane
     cv::line(frame, s_boundaries[0], s_boundaries[1], cv::Scalar(255, 255, 255), 7,
              cv::LINE_AA);
