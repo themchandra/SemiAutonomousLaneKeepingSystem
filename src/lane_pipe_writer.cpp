@@ -1,18 +1,19 @@
 #include "../include/lane_pipe_writer.h"
-
 #include <cerrno>
 #include <csignal>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
+// anonymous helpers used only for this source file
 namespace {
     constexpr const char *kLanePipePath = "/tmp/pacerbot_lane.pipe";
-    int g_pipe_fd                       = -1;
-    bool g_sigpipeIgnored               = false;
+    int g_pipe_fd         = -1; // File descriptor for the FIFO (-1 = no pipe open)
+    bool g_sigpipeIgnored = false;
 
     bool ensurePipeExists()
     {
+        // create the FIFO with r/w permissions
         if (mkfifo(kLanePipePath, 0666) == 0) {
             return true;
         }
@@ -63,13 +64,13 @@ namespace {
 
 bool initializeLanePipeWriter() { return openPipeIfNeeded(); }
 
-bool sendLaneInput(bool valid, float steering_error)
+bool sendLaneInput(float steering_error, bool valid)
 {
     if (!openPipeIfNeeded()) {
         return false;
     }
 
-    const LaneInput input {valid, steering_error};
+    const LaneInfo input {steering_error, valid};
     const ssize_t bytesWritten = write(g_pipe_fd, &input, sizeof(input));
 
     if (bytesWritten == static_cast<ssize_t>(sizeof(input))) {

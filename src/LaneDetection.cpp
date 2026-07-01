@@ -1,6 +1,4 @@
-#include "LaneDetection.h"
-#include "lane_pipe_writer.h"
-
+#include "../include/LaneDetection.h"
 #include <cstdlib>
 #include <ctime>
 #include <filesystem>
